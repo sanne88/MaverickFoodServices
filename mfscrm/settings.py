@@ -23,9 +23,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-e6q2%n5%t!*a__t2=-_uvaqk1b&!$+oi8y&)ks+@nlh#9na0*k'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', '.pythonanywhere.com']
+ALLOWED_HOSTS = []
 
 
 # Application definition
@@ -41,6 +41,8 @@ INSTALLED_APPS = [
     'crispy_forms' ,
     'django.contrib.humanize',
     'mathfilters',
+    'xhtml2pdf',
+    'reportlab'
 
 ]
 
@@ -130,3 +132,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_FILE_PATH = str(BASE_DIR.joinpath('sent_emails'))
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = "sampleuno8@gmail.com"
+
+EMAIL_HOST_PASSWORD = "sample@1234"
+
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

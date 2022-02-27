@@ -2,16 +2,20 @@ from django.shortcuts import render
 
 # Create your views here.
 
-from django.shortcuts import render
+from django.contrib.auth import login, authenticate
+from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import render, get_object_or_404, redirect
 from .models import *
 from .forms import *
 from django.contrib.auth.decorators import login_required
 from django.db.models import Sum
 from _decimal import Decimal
-
-
+import csv
+from django.http import HttpResponse
+from django.template.loader import get_template
+from xhtml2pdf import pisa
 now = timezone.now()
+
 
 def home(request):
     return render(request, 'crm/home.html',
@@ -157,3 +161,105 @@ def summary(request, pk):
                               'services': services,
                               'sum_service_charge': sum_service_charge,
                               'sum_product_charge': sum_product_charge,})
+
+def signup(request):
+    if request.method == 'POST':
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            form.save()
+            username = form.cleaned_data.get('username')
+            raw_password = form.cleaned_data.get('password1')
+            user = authenticate(username=username, password=raw_password)
+            login(request, user)
+            return redirect('login')
+    else:
+        form = UserCreationForm()
+    return render(request, 'registration/signup.html', {'form': form})
+
+#Generate CSV file
+def export_csv(request,pk):
+    customer = get_object_or_404(Customer, pk=pk)
+    services = Service.objects.filter(cust_name=pk)
+    products = Product.objects.filter(cust_name=pk)
+    sum_service_charge = \
+        Service.objects.filter(cust_name=pk).aggregate(Sum('service_charge'))
+    sum_product_charge = \
+        Product.objects.filter(cust_name=pk).aggregate(Sum('charge'))
+
+    # if no product or service records exist for the customer,
+    # change the ‘None’ returned by the query to 0.00
+    sum = sum_product_charge.get("charge__sum")
+    if sum == None:
+        sum_product_charge = {'charge__sum': Decimal('0')}
+    sum = sum_service_charge.get("service_charge__sum")
+    if sum == None:
+        sum_service_charge = {'service_charge__sum': Decimal('0')}
+    context = {'customer': customer,
+               'products': products,
+               'services': services,
+               'sum_service_charge': sum_service_charge,
+               'sum_product_charge': sum_product_charge, }
+    total = Decimal(sum_service_charge.get('service_charge__sum')) + Decimal(sum_product_charge.get('charge__sum'))
+    templatepath = 'pdf/report.html'
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment;filename="report.csv"'
+    template = get_template(templatepath)
+    writer = csv.writer(response)
+    writer.writerow(["Customer Summary"])
+    writer.writerow(["Customer Name ", customer.cust_name])
+    writer.writerow(["Total Of Service Charges and Product Charges ", total])
+    writer.writerow(["Services Information"])
+    writer.writerow(["Service Category", "Description", "Location", "Setup Time", "Cleanup Time", "Service Charge"])
+    queryset = Service.objects.filter(cust_name=pk)
+    for row in queryset:
+        writer.writerow(
+            [row.service_category, row.description, row.location, row.setup_time, row.cleanup_time, row.service_charge])
+    writer.writerow(["Total Service Charges", sum_service_charge.get("service_charge__sum")])
+
+    writer.writerow(["Product Information"])
+    writer.writerow(["Product", "Description", "Quantity", "Pickup Time", "Total Charge"])
+    queryset = Product.objects.filter(cust_name=pk)
+    for row in queryset:
+        writer.writerow(
+            [row.product, row.description, row.quantity, row.pickup_time, row.charge])
+    writer.writerow(["Total Product Charges", sum_product_charge.get("charge__sum")])
+
+
+    return response
+
+#Generate Pdf file
+
+def export_pdf(request,pk):
+
+
+    customer = get_object_or_404(Customer, pk=pk)
+    services = Service.objects.filter(cust_name=pk)
+    products = Product.objects.filter(cust_name=pk)
+    sum_service_charge = \
+        Service.objects.filter(cust_name=pk).aggregate(Sum('service_charge'))
+    sum_product_charge = \
+        Product.objects.filter(cust_name=pk).aggregate(Sum('charge'))
+
+    # if no product or service records exist for the customer,
+    # change the ‘None’ returned by the query to 0.00
+    sum = sum_product_charge.get("charge__sum")
+    if sum== None:
+        sum_product_charge = {'charge__sum' : Decimal('0')}
+    sum = sum_service_charge.get("service_charge__sum")
+    if sum== None:
+        sum_service_charge = {'service_charge__sum' : Decimal('0')}
+    context = {'customer': customer,
+     'products': products,
+     'services': services,
+     'sum_service_charge': sum_service_charge,
+     'sum_product_charge': sum_product_charge, }
+    #context ={ 'summary': currentsummary}
+    templatepath = 'pdf/report.html'
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment;filename="report.pdf"'
+    template = get_template(templatepath)
+    html = template.render(context)
+
+    #create pdf
+    pisa_status = pisa.CreatePDF(html, dest=response )
+    return response
